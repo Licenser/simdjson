@@ -11,6 +11,57 @@
 #include <iostream>
 #define PATH_SEP '/'
 
+#define ARRAY_CONTINUE()                          \
+  {                                               \
+    UPDATE_CHAR();                                \
+    switch (c) {                                  \
+    case ',':                                     \
+      UPDATE_CHAR();                              \
+      goto main_array_switch;                     \
+    case ']':                                     \
+      goto scope_end;                             \
+    default:                                      \
+      goto fail;                                  \
+    }                                             \
+  }
+
+#define OBJECT_BEGIN()                                \
+  {                                                   \
+    UPDATE_CHAR();                                    \
+    switch (c) {                                      \
+    case '"': {                                       \
+      if (!parse_string(buf, len, pj, depth, idx)) {  \
+        goto fail;                                    \
+      }                                               \
+      goto object_key_state;                          \
+    }                                                 \
+    case '}':                                         \
+      goto scope_end;                                 \
+    default:                                          \
+      goto fail;                                      \
+    }                                                 \
+  }
+
+#define OBJECT_CONTINUE()                               \
+  {                                                     \
+    UPDATE_CHAR();                                      \
+    switch (c) {                                        \
+    case ',':                                           \
+      UPDATE_CHAR();                                    \
+      if (c != '"') {                                   \
+        goto fail;                                      \
+      } else {                                          \
+        if (!parse_string(buf, len, pj, depth, idx)) {  \
+          goto fail;                                    \
+        }                                               \
+        goto object_key_state;                          \
+      }                                                 \
+    case '}':                                           \
+      goto scope_end;                                   \
+    default:                                            \
+      goto fail;                                        \
+    }                                                   \
+  }
 
 using namespace std;
 
@@ -110,6 +161,7 @@ int unified_machine(const uint8_t *buf, size_t len, ParsedJson &pj) {
       goto fail;
     }
     pj.write_tape(0, c); // strangely, moving this to object_begin slows things down
+    //OBJECT_BEGIN();
     goto object_begin;
   case '[':
     pj.containing_scope_offset[depth] = pj.get_current_loc();
@@ -324,7 +376,7 @@ object_key_state:
     if (depth > pj.depthcapacity) {
       goto fail;
     }
-
+    //    OBJECT_BEGIN();
     goto object_begin;
   }
   case '[': {
@@ -379,9 +431,9 @@ scope_end:
   goto *pj.ret_address[depth];
 #else
   if(pj.ret_address[depth] == 'a') {
-    goto array_continue;
+    ARRAY_CONTINUE();
   } else if (pj.ret_address[depth] == 'o') {
-    goto object_continue;
+    OBJECT_CONTINUE();
   } else goto start_continue;
 #endif
 
@@ -457,6 +509,7 @@ main_array_switch:
       goto fail;
     }
 
+    //OBJECT_BEGIN();
     goto object_begin;
   }
   case '[': {
